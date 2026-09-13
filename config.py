@@ -3,7 +3,7 @@ from pathlib import Path
 HF_REPO = "Mehgoss/sa-languages-corpus"
 PARALLEL_REPO = "Mehgoss/sa-languages-translation"
 
-ROOT = Path(__file__).parent
+ROOT =Path(__file__).parent
 RAW = ROOT / "data" / "raw"
 CLEAN = ROOT / "data" / "clean"
 STATE = ROOT / "data" / "state"
