@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 import process as process_mod
-from common import download_prefix, download_file_if_exists, upload_file
+from common import download_prefix, download_file_if_exists, upload_file, delete_prefix
 
 BUCKET = os.environ["DATA_BUCKET"]
 
@@ -10,7 +10,7 @@ BUCKET = os.environ["DATA_BUCKET"]
 def handler(event, context):
     """
     event: {"lang": "zu", "max_out": 0}   # max_out=0 means no cap
-    returns: {"lang", "kept", "shards_downloaded"}
+    returns: {"lang", "kept", "shards_downloaded", "raw_shards_deleted"}
     """
     lang = event["lang"]
     max_out = int(event.get("max_out", 0)) or None
@@ -36,11 +36,21 @@ def handler(event, context):
     kept = process_mod.process_lang(lang, skip_langid=False, skip_exclusion=False, max_out=max_out)
 
     clean_path = tmp_clean / f"{lang}.jsonl"
-    if clean_path.exists():
+    uploaded = clean_path.exists()
+    if uploaded:
         upload_file(BUCKET, clean_path, f"clean/{lang}.jsonl")
 
     cache_path = tmp_state / f"exclude.{lang}.npy"
     if cache_path.exists():
         upload_file(BUCKET, cache_path, exclude_key)
 
-    return {"lang": lang, "kept": kept, "shards_downloaded": shards}
+    # Raw shards are only ever needed until this point. Delete them now rather
+    # than waiting on the bucket's lifecycle rule (that rule is just a safety
+    # net for a run that fails before getting here) -- this is what actually
+    # keeps S3 costs down, not the lifecycle expiration by itself. Only clean
+    # up once the clean file genuinely made it to S3.
+    raw_deleted = 0
+    if uploaded:
+        raw_deleted = delete_prefix(BUCKET, f"raw/{lang}/")
+
+    return {"lang": lang, "kept": kept, "shards_downloaded": shards, "raw_shards_deleted": raw_deleted}
