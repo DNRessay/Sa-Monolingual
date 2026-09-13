@@ -36,3 +36,20 @@ def download_prefix(bucket, prefix, local_dir):
             _s3.download_file(bucket, key, str(dest))
             n += 1
     return n
+
+
+def delete_prefix(bucket, prefix):
+    """Deletes every object under s3://bucket/prefix. Returns count deleted.
+
+    Used to clean up raw/ shards right after they're successfully consumed,
+    instead of waiting on the bucket's lifecycle rule -- that rule is just a
+    safety net for runs that fail before cleanup, not the primary mechanism.
+    """
+    paginator = _s3.get_paginator("list_objects_v2")
+    n = 0
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+        if keys:
+            _s3.delete_objects(Bucket=bucket, Delete={"Objects": keys})
+            n += len(keys)
+    return n
