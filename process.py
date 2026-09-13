@@ -114,12 +114,19 @@ def in_exclusion(arr, h):
     return i < arr.size and arr[i] == np.uint64(h)
 
 
-def process_lang(lang, skip_langid=False, skip_exclusion=False, max_out=None):
-    src_dir = RAW / lang
-    if not src_dir.exists():
-        print(f"! no raw data for {lang}")
-        return 0
-
+def process_lang(lang, skip_langid=False, skip_exclusion=False, max_out=None,
+                  shard_iter=None, after_shard=None):
+    """
+    shard_iter: optional iterable of (source_name, local_path) pairs already
+    downloaded to disk. When given, RAW/lang is never scanned -- this lets a
+    caller stream one shard down (e.g. from S3) at a time instead of mirroring
+    an entire language locally first, which can exceed Lambda's /tmp limit for
+    high-resource languages. Falls back to scanning RAW/lang when omitted, for
+    local/Colab use.
+    after_shard: optional callback(local_path) invoked once a shard's lines
+    are fully consumed, so the caller can delete it immediately and keep peak
+    disk usage to one shard at a time.
+    """
     CLEAN.mkdir(parents=True, exist_ok=True)
     out_path = CLEAN / f"{lang}.jsonl"
 
@@ -132,13 +139,25 @@ def process_lang(lang, skip_langid=False, skip_exclusion=False, max_out=None):
     kept = 0
     stats = {}
 
+    if shard_iter is None:
+        src_dir = RAW / lang
+        if not src_dir.exists():
+            print(f"! no raw data for {lang}")
+            return 0
+
+        def _default_iter():
+            for shard in sorted(src_dir.rglob("*.jsonl")):
+                # local CLI writes flat files (source.jsonl); the Lambda fetch
+                # path writes numbered parts under a source/ subdirectory
+                source = shard.parent.name if shard.parent != src_dir else shard.stem
+                yield source, shard
+
+        shard_iter = _default_iter()
+
     with out_path.open("w", encoding="utf-8") as out:
-        for shard in sorted(src_dir.rglob("*.jsonl")):
-            # local CLI writes flat files (source.jsonl); the Lambda fetch path
-            # writes numbered parts under a source/ subdirectory instead
-            source = shard.parent.name if shard.parent != src_dir else shard.stem
+        for source, shard in shard_iter:
             s_kept = stats.get(source, 0)
-            with shard.open(encoding="utf-8") as f:
+            with open(shard, encoding="utf-8") as f:
                 for line in f:
                     try:
                         text = json.loads(line)["text"]
@@ -164,11 +183,16 @@ def process_lang(lang, skip_langid=False, skip_exclusion=False, max_out=None):
                         if max_out and kept >= max_out:
                             stats[source] = s_kept
                             print(f"  {lang}: {kept} (cap reached)")
+                            if after_shard:
+                                after_shard(shard)
                             return kept
             stats[source] = s_kept
             print(f"  {source}: {s_kept} so far")
+            if after_shard:
+                after_shard(shard)
 
     print(f"{lang}: {kept} unique sentences -> {out_path}")
+    STATE.mkdir(parents=True, exist_ok=True)
     (STATE / f"{lang}.stats.json").write_text(json.dumps(stats, indent=2))
     return kept
 
