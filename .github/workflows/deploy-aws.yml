@@ -8,6 +8,7 @@ on:
       - "config.py"
       - "fetch.py"
       - "process.py"
+      - "push.py"
   workflow_dispatch: {}
 
 # Start here with access-key secrets while you're learning the pipeline.
@@ -23,6 +24,10 @@ on:
 #                                                 the logs, it's never written
 #                                                 to samconfig.toml)
 
+env:
+  AWS_REGION: eu-west-1
+  STACK_NAME: sa-languages-corpus
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -33,9 +38,69 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - uses: aws-actions/setup-sam@v2
+
+      # A stack in ROLLBACK_COMPLETE / ROLLBACK_FAILED / REVIEW_IN_PROGRESS has no
+      # usable resources but still blocks the next deploy. CloudFormation will not
+      # update out of those states -- the stack has to be deleted first. Same for
+      # SAM's CompanionStack (holds the ECR repos for image-based functions) and
+      # its managed bootstrap stack.
+      - name: Clear wedged stacks
+        run: |
+          set -u
+          BAD_STATES="ROLLBACK_COMPLETE ROLLBACK_FAILED REVIEW_IN_PROGRESS CREATE_FAILED DELETE_FAILED UPDATE_ROLLBACK_FAILED"
+
+          clear_stack () {
+            local name="$1"
+            local status
+            status=$(aws cloudformation describe-stacks \
+                       --stack-name "$name" \
+                       --region "$AWS_REGION" \
+                       --query "Stacks[0].StackStatus" \
+                       --output text 2>/dev/null || echo "MISSING")
+
+            if [ "$status" = "MISSING" ]; then
+              echo "  $name: does not exist, nothing to clear"
+              return 0
+            fi
+
+            if echo "$BAD_STATES" | grep -qw "$status"; then
+              echo "  $name: $status -> deleting"
+
+              # a non-empty S3 bucket blocks stack deletion, so drain any the stack owns
+              for b in $(aws cloudformation describe-stack-resources \
+                           --stack-name "$name" --region "$AWS_REGION" \
+                           --query "StackResources[?ResourceType=='AWS::S3::Bucket'].PhysicalResourceId" \
+                           --output text 2>/dev/null || true); do
+                [ -n "$b" ] && echo "    emptying s3://$b" && \
+                  aws s3 rm "s3://$b" --recursive --region "$AWS_REGION" >/dev/null 2>&1 || true
+              done
+
+              aws cloudformation delete-stack --stack-name "$name" --region "$AWS_REGION"
+              aws cloudformation wait stack-delete-complete \
+                --stack-name "$name" --region "$AWS_REGION" 2>/dev/null || true
+              echo "  $name: cleared"
+            else
+              echo "  $name: $status (healthy, leaving alone)"
+            fi
+          }
+
+          echo "Checking main stack..."
+          clear_stack "$STACK_NAME"
+
+          echo "Checking SAM bootstrap stack..."
+          clear_stack "aws-sam-cli-managed-default"
+
+          echo "Checking companion stacks..."
+          for s in $(aws cloudformation list-stacks \
+                       --region "$AWS_REGION" \
+                       --stack-status-filter $BAD_STATES \
+                       --query "StackSummaries[?contains(StackName, '$STACK_NAME')].StackName" \
+                       --output text 2>/dev/null || true); do
+            [ -n "$s" ] && clear_stack "$s"
+          done
 
       - name: sam build
         run: sam build -t aws/template.yaml
@@ -47,3 +112,25 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides "Stage=dev HfToken=${{ secrets.HF_TOKEN }}"
+
+      - name: Show stack outputs
+        if: success()
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+      # On failure, surface the real CloudFormation reason -- SAM CLI usually
+      # reports a generic waiter timeout instead of the underlying error.
+      - name: Diagnose failure
+        if: failure()
+        run: |
+          for name in "$STACK_NAME" "aws-sam-cli-managed-default"; do
+            echo "=== $name ==="
+            aws cloudformation describe-stack-events \
+              --stack-name "$name" --region "$AWS_REGION" \
+              --query "StackEvents[?ResourceStatusReason!=null && (contains(ResourceStatus,'FAILED') || contains(ResourceStatus,'ROLLBACK'))].[LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+              --output table 2>/dev/null | head -40 || echo "  (no events)"
+          done
