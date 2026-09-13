@@ -32,10 +32,10 @@ Resources:
       BucketName: !Sub "sa-languages-corpus-${AWS::AccountId}-${Stage}"
       LifecycleConfiguration:
         Rules:
-          - Id: ExpireRawShardsAfter30Days
+          - Id: ExpireRawShardsAfter1Day
             Status: Enabled
             Prefix: raw/
-            ExpirationInDays: 30
+            ExpirationInDays: 1
 
   FetchFunction:
     Type: AWS::Serverless::Function
