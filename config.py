@@ -3,7 +3,7 @@ from pathlib import Path
 HF_REPO = "Mehgoss/sa-languages-corpus"
 PARALLEL_REPO = "Mehgoss/sa-languages-translation"
 
-ROOT =Path(__file__).parent
+ROOT = Path(__file__).parent
 RAW = ROOT / "data" / "raw"
 CLEAN = ROOT / "data" / "clean"
 STATE = ROOT / "data" / "state"
@@ -61,16 +61,17 @@ SOURCES = [
         "split": "train",
         "field": "text",
         "configs": {
+            # nr (nbl_Latn) and ve (ven_Latn) confirmed absent from this corpus -- not a bug,
+            # HPLT genuinely doesn't cover them
             "af": "afr_Latn", "nso": "nso_Latn", "st": "sot_Latn", "ss": "ssw_Latn",
-            "tn": "tsn_Latn", "ts": "tso_Latn", "ve": "ven_Latn", "xh": "xho_Latn",
-            "zu": "zul_Latn", "nr": "nbl_Latn",
+            "tn": "tsn_Latn", "ts": "tso_Latn", "xh": "xho_Latn", "zu": "zul_Latn",
         },
     },
     {
         "name": "mc4",
         "kind": "hf",
         "repo": "allenai/c4",
-        "split": "train",
+        "split": "validation",  # this config only ships a validation split, no train
         "field": "text",
         "data_dir_tpl": "multilingual",
         "configs": {"af": "af", "xh": "xh", "zu": "zu", "st": "st", "ts": "ts", "nso": "ns"},
@@ -100,41 +101,6 @@ SOURCES = [
         },
     },
     {
-        "name": "mzansitext",
-        "kind": "hf",
-        "repo": "anrilombard/mzansi-text",
-        "split": "train",
-        "field": "text",
-        "configs": {
-            "af": "afr", "nr": "nbl", "nso": "nso", "ss": "ssw", "st": "sot",
-            "tn": "tsn", "ts": "tso", "ve": "ven", "xh": "xho", "zu": "zul",
-        },
-    },
-    {
-        "name": "wura",
-        "kind": "hf",
-        "repo": "castorini/wura",
-        "split": "train",
-        "field": "text",
-        "configs": {"af": "afr", "zu": "zul", "xh": "xho", "st": "sot"},
-    },
-    {
-        "name": "inkuba_mono",
-        "kind": "hf",
-        "repo": "lelapa/Inkuba-Mono",
-        "split": "train",
-        "field": "text",
-        "configs": {"zu": "zul", "xh": "xho"},
-    },
-    {
-        "name": "cc100",
-        "kind": "hf",
-        "repo": "cc100",
-        "split": "train",
-        "field": "text",
-        "configs": {"af": "af", "xh": "xh", "zu": "zu", "st": "st", "tn": "tn", "nso": "ns", "ss": "ss"},
-    },
-    {
         "name": "wikipedia",
         "kind": "hf",
         "repo": "wikimedia/wikipedia",
@@ -158,14 +124,37 @@ SOURCES = [
         },
     },
     {
-        "name": "za_gov",
+        # A separate HF repo per language, not one repo with per-language configs --
+        # see fetch_hf()'s "repos"/"fields" override support. zu/xh/st/tn/ts confirmed
+        # to exist and named exactly this way; af is a parallel af-en repo (still has
+        # a plain "Afrikaans" column); nr/nso/ve are unverified guesses at the likely
+        # slug -- if wrong they just 404 and get skipped, same as any other dead source.
+        "name": "michsethowusu_emotions",
         "kind": "hf",
-        "repo": "dsfsi/za-gov-multilingual",
+        "repo": None,
+        "field": None,
         "split": "train",
-        "field": "text",
         "configs": {
-            "af": "afr", "nr": "nbl", "nso": "nso", "ss": "ssw", "st": "sot",
-            "tn": "tsn", "ts": "tso", "ve": "ven", "xh": "xho", "zu": "zul",
+            "af": "default", "nr": "default", "nso": "default", "ss": "default",
+            "st": "default", "tn": "default", "ts": "default", "ve": "default",
+            "xh": "default", "zu": "default",
+        },
+        "repos": {
+            "af": "michsethowusu/afrikaans-english-emotions-corpus",
+            "nr": "michsethowusu/ndebele-emotions-corpus",
+            "nso": "michsethowusu/sepedi-emotions-corpus",
+            "ss": "michsethowusu/swati-emotions-corpus",
+            "st": "michsethowusu/sesotho-emotions-corpus",
+            "tn": "michsethowusu/tswana-emotions-corpus",
+            "ts": "michsethowusu/tsonga-emotions-corpus",
+            "ve": "michsethowusu/venda-emotions-corpus",
+            "xh": "michsethowusu/xhosa-emotions-corpus",
+            "zu": "michsethowusu/zulu-emotions-corpus",
+        },
+        "fields": {
+            "af": "Afrikaans", "nr": "Ndebele", "nso": "Sepedi", "ss": "Swati",
+            "st": "Sesotho", "tn": "Tswana", "ts": "Tsonga", "ve": "Venda",
+            "xh": "Xhosa", "zu": "Zulu",
         },
     },
     {
