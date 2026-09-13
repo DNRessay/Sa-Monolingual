@@ -7,6 +7,7 @@
       "ItemsPath": "$.pairs",
       "ResultPath": "$.fetchResults",
       "MaxConcurrency": 6,
+      "ToleratedFailurePercentage": 20,
       "ItemProcessor": {
         "ProcessorConfig": { "Mode": "INLINE" },
         "StartAt": "InitFetchLoop",
@@ -66,6 +67,7 @@
       "ItemsPath": "$.langs",
       "ResultPath": "$.processResults",
       "MaxConcurrency": 3,
+      "ToleratedFailurePercentage": 10,
       "ItemSelector": {
         "lang.$": "$$.Map.Item.Value"
       },
@@ -76,6 +78,36 @@
           "ProcessLang": {
             "Type": "Task",
             "Resource": "${ProcessFunctionArn}",
+            "Retry": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "IntervalSeconds": 30,
+                "MaxAttempts": 2,
+                "BackoffRate": 2.0
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "Next": "PushAll"
+    },
+    "PushAll": {
+      "Type": "Map",
+      "ItemsPath": "$.langs",
+      "ResultPath": "$.pushResults",
+      "MaxConcurrency": 3,
+      "ToleratedFailurePercentage": 10,
+      "ItemSelector": {
+        "lang.$": "$$.Map.Item.Value"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "INLINE" },
+        "StartAt": "PushLang",
+        "States": {
+          "PushLang": {
+            "Type": "Task",
+            "Resource": "${PushFunctionArn}",
             "Retry": [
               {
                 "ErrorEquals": ["States.ALL"],
