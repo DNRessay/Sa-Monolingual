@@ -97,7 +97,7 @@ jobs:
           for s in $(aws cloudformation list-stacks \
                        --region "$AWS_REGION" \
                        --stack-status-filter $BAD_STATES \
-                       --query "StackSummaries[?contains(StackName, '$STACK_NAME')].StackName" \
+                       --query "StackSummaries[?contains(StackName, 'sa-languages-corpus')].StackName" \
                        --output text 2>/dev/null || true); do
             [ -n "$s" ] && clear_stack "$s"
           done
@@ -123,14 +123,33 @@ jobs:
             --output table
 
       # On failure, surface the real CloudFormation reason -- SAM CLI usually
-      # reports a generic waiter timeout instead of the underlying error.
+      # reports a generic waiter timeout instead of the underlying error, and
+      # the actual failure is very often in the CompanionStack (holds the ECR
+      # repos for image-based functions) rather than the main stack itself.
       - name: Diagnose failure
         if: failure()
         run: |
           for name in "$STACK_NAME" "aws-sam-cli-managed-default"; do
             echo "=== $name ==="
-            aws cloudformation describe-stack-events \
+            events=$(aws cloudformation describe-stack-events \
               --stack-name "$name" --region "$AWS_REGION" \
-              --query "StackEvents[?ResourceStatusReason!=null && (contains(ResourceStatus,'FAILED') || contains(ResourceStatus,'ROLLBACK'))].[LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
-              --output table 2>/dev/null | head -40 || echo "  (no events)"
+              --query "StackEvents[?contains(ResourceStatus,'FAILED') || contains(ResourceStatus,'ROLLBACK')].[LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+              --output table 2>/dev/null)
+            if [ -n "$events" ]; then
+              echo "$events"
+            else
+              echo "  (no events, or stack no longer exists -- see companion stacks below)"
+            fi
+          done
+
+          echo "=== companion stacks ==="
+          for s in $(aws cloudformation list-stacks \
+                       --region "$AWS_REGION" \
+                       --query "StackSummaries[?contains(StackName, 'sa-languages-corpus') && StackStatus != 'DELETE_COMPLETE' && StackName != '$STACK_NAME'].StackName" \
+                       --output text 2>/dev/null || true); do
+            echo "--- $s ---"
+            aws cloudformation describe-stack-events \
+              --stack-name "$s" --region "$AWS_REGION" \
+              --query "StackEvents[?contains(ResourceStatus,'FAILED') || contains(ResourceStatus,'ROLLBACK')].[LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+              --output table 2>/dev/null
           done
