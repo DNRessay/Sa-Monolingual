@@ -67,14 +67,6 @@ SOURCES = [
         },
     },
     {
-        "name": "culturax",
-        "kind": "hf",
-        "repo": "uonlp/CulturaX",
-        "split": "train",
-        "field": "text",
-        "configs": {"af": "af", "xh": "xh", "zu": "zu", "st": "st", "tn": "tn", "ts": "ts", "nso": "ns"},
-    },
-    {
         "name": "mc4",
         "kind": "hf",
         "repo": "allenai/c4",
@@ -141,14 +133,6 @@ SOURCES = [
         "split": "train",
         "field": "text",
         "configs": {"af": "af", "xh": "xh", "zu": "zu", "st": "st", "tn": "tn", "nso": "ns", "ss": "ss"},
-    },
-    {
-        "name": "oscar2301",
-        "kind": "hf",
-        "repo": "oscar-corpus/OSCAR-2301",
-        "split": "train",
-        "field": "text",
-        "configs": {"af": "af", "xh": "xh", "zu": "zu", "st": "st", "tn": "tn", "nso": "nso"},
     },
     {
         "name": "wikipedia",
