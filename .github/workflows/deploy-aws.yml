@@ -11,6 +11,15 @@ on:
       - "push.py"
   workflow_dispatch: {}
 
+# Only one deploy runs at a time -- CloudFormation rejects a second mutation
+# while the first is still in progress ("stack ... is in CREATE_IN_PROGRESS
+# state and can not be updated"), which happens if this workflow gets
+# re-triggered or manually re-run before the previous run finishes. Queue
+# instead of racing; don't cancel a deploy that's already underway.
+concurrency:
+  group: deploy-aws-${{ github.ref }}
+  cancel-in-progress: false
+
 # Start here with access-key secrets while you're learning the pipeline.
 # Once it's working, switch to OIDC (permissions: id-token: write, and
 # aws-actions/configure-aws-credentials with role-to-assume) so no long-lived
