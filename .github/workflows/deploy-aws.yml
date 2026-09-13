@@ -14,6 +14,14 @@ on:
 # Once it's working, switch to OIDC (permissions: id-token: write, and
 # aws-actions/configure-aws-credentials with role-to-assume) so no long-lived
 # AWS keys have to live in GitHub at all.
+#
+# Secrets required (Settings -> Secrets and variables -> Actions):
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY  -- deploy permissions
+#   HF_TOKEN                                  -- HF write token for PushFunction
+#                                                 (passed as a CloudFormation
+#                                                 parameter, GitHub masks it in
+#                                                 the logs, it's never written
+#                                                 to samconfig.toml)
 
 jobs:
   deploy:
@@ -37,4 +45,5 @@ jobs:
           sam deploy \
             --config-file aws/samconfig.toml \
             --no-confirm-changeset \
-            --no-fail-on-empty-changeset
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "Stage=dev HfToken=${{ secrets.HF_TOKEN }}"
