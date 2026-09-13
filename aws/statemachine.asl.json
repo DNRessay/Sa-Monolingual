@@ -1,5 +1,5 @@
 {
-  "Comment": "sa-languages-corpus: fetch every (language, source) pair, resuming each in chunks until its stream is exhausted or a safety cap is hit, then process each language into a clean deduped file.",
+  "Comment": "sa-languages-corpus: fetch every (language, source) pair, resuming each in chunks until its stream is exhausted or a safety cap is hit, then process each language into a clean deduped file, then push. A Catch on each task means one bad source or language can never take down the whole run -- that item is just marked failed and the run continues (INLINE-mode Map states ignore ToleratedFailurePercentage entirely; Catch is the mechanism that actually works here).",
   "StartAt": "FetchAll",
   "States": {
     "FetchAll": {
@@ -7,7 +7,6 @@
       "ItemsPath": "$.pairs",
       "ResultPath": "$.fetchResults",
       "MaxConcurrency": 6,
-      "ToleratedFailurePercentage": 20,
       "ItemProcessor": {
         "ProcessorConfig": { "Mode": "INLINE" },
         "StartAt": "InitFetchLoop",
@@ -35,6 +34,13 @@
                 "BackoffRate": 2.0
               }
             ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "FetchItemFailed"
+              }
+            ],
             "Next": "AdvanceFetchLoop"
           },
           "AdvanceFetchLoop": {
@@ -57,7 +63,17 @@
             ],
             "Default": "FetchChunk"
           },
-          "FetchSucceed": { "Type": "Succeed" }
+          "FetchSucceed": { "Type": "Succeed" },
+          "FetchItemFailed": {
+            "Type": "Pass",
+            "Parameters": {
+              "lang.$": "$.lang",
+              "source.$": "$.source",
+              "failed": true,
+              "error.$": "$.error"
+            },
+            "End": true
+          }
         }
       },
       "Next": "ProcessAll"
@@ -67,7 +83,6 @@
       "ItemsPath": "$.langs",
       "ResultPath": "$.processResults",
       "MaxConcurrency": 3,
-      "ToleratedFailurePercentage": 10,
       "ItemSelector": {
         "lang.$": "$$.Map.Item.Value"
       },
@@ -86,6 +101,22 @@
                 "BackoffRate": 2.0
               }
             ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "ProcessItemFailed"
+              }
+            ],
+            "End": true
+          },
+          "ProcessItemFailed": {
+            "Type": "Pass",
+            "Parameters": {
+              "lang.$": "$.lang",
+              "failed": true,
+              "error.$": "$.error"
+            },
             "End": true
           }
         }
@@ -97,7 +128,6 @@
       "ItemsPath": "$.langs",
       "ResultPath": "$.pushResults",
       "MaxConcurrency": 3,
-      "ToleratedFailurePercentage": 10,
       "ItemSelector": {
         "lang.$": "$$.Map.Item.Value"
       },
@@ -116,6 +146,22 @@
                 "BackoffRate": 2.0
               }
             ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "ResultPath": "$.error",
+                "Next": "PushItemFailed"
+              }
+            ],
+            "End": true
+          },
+          "PushItemFailed": {
+            "Type": "Pass",
+            "Parameters": {
+              "lang.$": "$.lang",
+              "failed": true,
+              "error.$": "$.error"
+            },
             "End": true
           }
         }
