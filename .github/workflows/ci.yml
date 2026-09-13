@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile check
+        run: >
+          python -m py_compile
+          config.py fetch.py process.py push.py run.py
+          aws/generate_pairs.py
+          aws/functions/common.py
+          aws/functions/fetch/app.py
+          aws/functions/process/app.py
+
+  validate-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/setup-sam@v2
+      - name: sam validate (lint only, no AWS credentials)
+        run: sam validate --lint -t aws/template.yaml

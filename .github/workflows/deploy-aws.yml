@@ -1,0 +1,40 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "aws/**"
+      - "config.py"
+      - "fetch.py"
+      - "process.py"
+  workflow_dispatch: {}
+
+# Start here with access-key secrets while you're learning the pipeline.
+# Once it's working, switch to OIDC (permissions: id-token: write, and
+# aws-actions/configure-aws-credentials with role-to-assume) so no long-lived
+# AWS keys have to live in GitHub at all.
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: sam build
+        run: sam build -t aws/template.yaml
+
+      - name: sam deploy
+        run: |
+          sam deploy \
+            --config-file aws/samconfig.toml \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
