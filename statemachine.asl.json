@@ -7,6 +7,7 @@
       "ItemsPath": "$.pairs",
       "ResultPath": "$.fetchResults",
       "MaxConcurrency": 6,
+      "ToleratedFailurePercentage": 20,
       "ItemProcessor": {
         "ProcessorConfig": { "Mode": "INLINE" },
         "StartAt": "InitFetchLoop",
@@ -66,6 +67,7 @@
       "ItemsPath": "$.langs",
       "ResultPath": "$.processResults",
       "MaxConcurrency": 3,
+      "ToleratedFailurePercentage": 10,
       "ItemSelector": {
         "lang.$": "$$.Map.Item.Value"
       },
@@ -95,6 +97,7 @@
       "ItemsPath": "$.langs",
       "ResultPath": "$.pushResults",
       "MaxConcurrency": 3,
+      "ToleratedFailurePercentage": 10,
       "ItemSelector": {
         "lang.$": "$$.Map.Item.Value"
       },
